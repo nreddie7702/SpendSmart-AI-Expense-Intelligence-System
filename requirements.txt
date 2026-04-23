@@ -4,3 +4,4 @@ matplotlib
 supabase
 plotly==5.19.0
 fpdf2
+google-generativeai
