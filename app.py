@@ -156,6 +156,17 @@ def load_exp(uid):
 
 # ── OAUTH CALLBACK ──
 params=st.query_params
+if "code" in params and st.session_state.user is None:
+    try:
+        code = params["code"]
+        r = supabase.auth.exchange_code_for_session({"auth_code": code})
+        if r.user:
+            st.session_state.user = r.user
+            st.session_state.access_token = r.session.access_token
+            st.query_params.clear()
+            st.rerun()
+    except: pass
+
 if "access_token" in params and st.session_state.user is None:
     try:
         tok=params["access_token"]
