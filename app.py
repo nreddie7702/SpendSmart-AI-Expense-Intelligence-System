@@ -860,13 +860,27 @@ with tab_ai:
                     
                     contents.append(types.Content(role="user", parts=[types.Part.from_text(text=prompt)]))
                     
-                    response = client.models.generate_content(
-                        model="gemini-1.5-flash",
-                        contents=contents,
-                        config=types.GenerateContentConfig(
-                            system_instruction=sys_prompt,
-                        )
-                    )
+                    # Automatic model fallback to prevent 404 or 429 quota limits
+                    models_to_try = ["gemini-1.5-flash-8b", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.5-pro"]
+                    response = None
+                    last_error = None
+                    
+                    for model_name in models_to_try:
+                        try:
+                            response = client.models.generate_content(
+                                model=model_name,
+                                contents=contents,
+                                config=types.GenerateContentConfig(
+                                    system_instruction=sys_prompt,
+                                )
+                            )
+                            break # Success!
+                        except Exception as e:
+                            last_error = e
+                            continue
+                    
+                    if response is None:
+                        raise last_error
                     
                     message_placeholder.markdown(response.text)
                     st.session_state.chat_history.append({"role": "assistant", "content": response.text})
