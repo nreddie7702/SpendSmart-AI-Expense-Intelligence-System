@@ -679,7 +679,7 @@ month_start = date(today.year, today.month, 1)
 # ── TOP NAV ──
 n1, n2 = st.columns([3, 1])
 with n1:
-    st.markdown('<span style="font-size:22px;font-weight:700;color:#6366f1;">Spend</span><span style="font-size:22px;font-weight:700;color:#0f172a;">Smart</span>', unsafe_allow_html=True)
+    st.markdown('<span style="font-size:22px;font-weight:700;color:#6366f1;">Spend</span><span style="font-size:22px;font-weight:700;color:#818cf8;">Smart</span>', unsafe_allow_html=True)
 with n2:
     st.markdown(f'<div style="text-align:right;padding-top:4px;display:flex;align-items:center;justify-content:flex-end;gap:6px;"><div style="width:28px;height:28px;border-radius:50%;background:#6366f1;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">{initials}</div><span style="font-size:12px;color:#64748b;">{first_name}</span></div>', unsafe_allow_html=True)
 
@@ -793,7 +793,7 @@ with tab1:
 # ─────────────────────────────────────────
 with tab2:
     if df_all.empty:
-        st.markdown('<div class="i-box" style="margin-top:1rem;">No data yet. Add expenses to see analytics.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="i-box" style="margin-top:1rem;">Your analytics will appear here once you add some expenses in the <b>Add</b> tab.</div>', unsafe_allow_html=True)
     else:
         df_all["month"] = df_all["date"].dt.to_period("M").astype(str)
         months = sorted(df_all["month"].unique(), reverse=True)
