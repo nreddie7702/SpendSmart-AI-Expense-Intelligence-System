@@ -138,10 +138,8 @@ div[data-testid="metric-container"] div[data-testid="stMetricValue"]{color:#0f17
 .week-fill{height:8px;border-radius:99px;transition:width .4s;}
 .week-val{font-size:12px;font-weight:500;color:#0f172a;min-width:55px;text-align:right;}
 
-/* TABS */
-.stTabs [data-baseweb="tab-list"]{gap:6px;background:rgba(0,0,0,0.03);border-radius:12px;padding:4px;border:1px solid rgba(0,0,0,0.05);}
-.stTabs [data-baseweb="tab"]{border-radius:8px;padding:7px 14px;font-size:13px;font-weight:500;}
-.stTabs [aria-selected="true"]{background:#6366f1!important;color:#fff!important;}
+/* TABS (REMOVED CUSTOM CSS FOR VISIBILITY) */
+
 
 /* ADD FORM */
 .add-card{background:#fff;border:0.5px solid #e2e8f0;border-radius:16px;padding:1.4rem;max-width:480px;margin:0 auto;}
