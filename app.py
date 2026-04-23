@@ -861,7 +861,7 @@ with tab_ai:
                     contents.append(types.Content(role="user", parts=[types.Part.from_text(text=prompt)]))
                     
                     # Automatic model fallback to prevent 404 or 429 quota limits
-                    models_to_try = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro", "gemini-1.0-pro", "gemini-pro", "gemini-2.0-flash-lite-preview-02-05", "gemini-2.0-flash-exp"]
+                    models_to_try = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite-preview", "gemini-flash-lite-latest"]
                     response = None
                     last_error = None
                     
