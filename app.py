@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.express as px
 from supabase import create_client, Client
 from datetime import datetime
 import re
@@ -143,6 +144,15 @@ def save_exp(uid,date,desc,amount,cat):
         return True
     except Exception as e:
         st.error(f"Save error: {e}")
+        return False
+
+def delete_exp(uid, exp_id):
+    try:
+        _set_token()
+        supabase.table("expenses").delete().eq("user_id", uid).eq("id", exp_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Delete error: {e}")
         return False
 
 def load_exp(uid):
@@ -342,35 +352,19 @@ with tab1:
 
     if not by_cat.empty:
         st.markdown('<div class="sh">Charts</div>',unsafe_allow_html=True)
-        fig,ax=plt.subplots(figsize=(6,3.5))
-        cols=[cat_color(c) for c in by_cat.index]
-        bars=ax.bar(by_cat.index,by_cat.values,color=cols,edgecolor="white",linewidth=1.5,width=0.55)
-        ax.set_facecolor("#f8fafc");fig.patch.set_facecolor("#f8fafc")
-        ax.spines[["top","right","left"]].set_visible(False);ax.spines["bottom"].set_color("#e2e8f0")
-        ax.tick_params(axis="x",rotation=30,labelsize=10,colors="#334155")
-        ax.tick_params(axis="y",labelsize=9,colors="#94a3b8")
-        ax.yaxis.grid(True,linestyle="--",alpha=0.5,color="#e2e8f0")
-        for bar,val in zip(bars,by_cat.values):
-            ax.text(bar.get_x()+bar.get_width()/2,bar.get_height()+20,f"₹{val:,.0f}",ha="center",va="bottom",fontsize=8,color="#334155",fontweight="600")
-        ax.set_title("Spending by category",fontsize=12,fontweight="600",color="#0f172a",pad=10)
-        plt.tight_layout()
         st.markdown('<div class="cc">',unsafe_allow_html=True)
-        st.pyplot(fig);plt.close()
+        bar_df = by_cat.reset_index()
+        fig = px.bar(bar_df, x="category", y="amount", text_auto='.0f', color="category",
+                     color_discrete_map=CAT_COLORS, title="Spending by Category", labels={"amount": "Amount", "category": ""})
+        fig.update_layout(showlegend=False, plot_bgcolor="#f8fafc", paper_bgcolor="#f8fafc", title_font=dict(size=14, color="#0f172a"), margin=dict(t=40, b=0, l=0, r=0), height=320)
+        st.plotly_chart(fig, use_container_width=True)
         st.markdown("</div>",unsafe_allow_html=True)
 
-        fig2,ax2=plt.subplots(figsize=(6,3.5))
-        cols2=[cat_color(c) for c in by_cat.index]
-        wedges,_,autotexts=ax2.pie(by_cat.values,labels=None,autopct="%1.1f%%",colors=cols2,startangle=140,wedgeprops=dict(edgecolor="white",linewidth=2),pctdistance=0.75)
-        for at in autotexts: at.set_fontsize(9);at.set_color("white");at.set_fontweight("bold")
-        ax2.legend(wedges,by_cat.index,loc="lower center",bbox_to_anchor=(0.5,-0.15),ncol=3,fontsize=9,frameon=False)
-        ax2.add_patch(plt.Circle((0,0),0.55,color="#f8fafc"))
-        ax2.text(0,0.1,"Total",ha="center",fontsize=9,color="#94a3b8")
-        ax2.text(0,-0.15,f"₹{total:,.0f}",ha="center",fontsize=13,fontweight="700",color="#0f172a")
-        fig2.patch.set_facecolor("#f8fafc");ax2.set_facecolor("#f8fafc")
-        ax2.set_title("Category breakdown",fontsize=12,fontweight="600",color="#0f172a",pad=10)
-        plt.tight_layout()
         st.markdown('<div class="cc">',unsafe_allow_html=True)
-        st.pyplot(fig2);plt.close()
+        fig2 = px.pie(bar_df, values="amount", names="category", color="category",
+                      color_discrete_map=CAT_COLORS, title="Category Breakdown", hole=0.55)
+        fig2.update_layout(plot_bgcolor="#f8fafc", paper_bgcolor="#f8fafc", title_font=dict(size=14, color="#0f172a"), margin=dict(t=40, b=0, l=0, r=0), height=320, annotations=[dict(text=f"Total<br>₹{total:,.0f}", x=0.5, y=0.5, font_size=16, showarrow=False, font_color="#0f172a")])
+        st.plotly_chart(fig2, use_container_width=True)
         st.markdown("</div>",unsafe_allow_html=True)
 
     st.markdown('<div class="sh">Smart insights</div>',unsafe_allow_html=True)
@@ -387,14 +381,37 @@ with tab1:
     for i in ins: st.markdown(i,unsafe_allow_html=True)
 
     st.markdown('<div class="sh">Transactions</div>',unsafe_allow_html=True)
-    disp=df_f[["date","description","category","amount"]].copy()
-    disp.columns=["Date","Description","Category","Amount (₹)"]
-    disp["Date"]=disp["Date"].dt.strftime("%d %b %Y")
-    disp=disp.sort_values("Date",ascending=False)
-    st.dataframe(disp,use_container_width=True,hide_index=True,
+    c_s1, c_s2 = st.columns(2)
+    s_query = c_s1.text_input("🔍 Search description", "", key="t1_search")
+    s_cat = c_s2.selectbox("📋 Filter category", ["All"] + CATEGORIES, key="t1_filter")
+    
+    disp = df_f.copy()
+    if s_query: disp = disp[disp["description"].str.contains(s_query, case=False, na=False)]
+    if s_cat != "All": disp = disp[disp["category"] == s_cat]
+    
+    if "id" not in disp.columns: disp["id"] = ""
+    
+    disp = disp[["id", "date","description","category","amount"]].copy()
+    disp.columns = ["ID", "Date","Description","Category","Amount (₹)"]
+    disp["Date"] = disp["Date"].dt.strftime("%d %b %Y")
+    disp = disp.sort_values("Date", ascending=False)
+    
+    st.dataframe(disp[["Date","Description","Category","Amount (₹)"]],use_container_width=True,hide_index=True,
                  column_config={"Amount (₹)":st.column_config.NumberColumn(format="₹%.0f"),
                                 "Date":st.column_config.TextColumn(width="small"),
                                 "Category":st.column_config.TextColumn(width="small")})
+
+    if not disp.empty and disp["ID"].iloc[0] != "":
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        del_col1, del_col2 = st.columns([3, 1])
+        with del_col1:
+            del_opts = disp.apply(lambda x: f"{x['Date']} - {x['Description']} (₹{x['Amount (₹)']}) [ID: {x['ID']}]", axis=1).tolist()
+            del_sel = st.selectbox("Select expense to delete", del_opts, label_visibility="collapsed")
+        with del_col2:
+            if st.button("🗑️ Delete", type="primary", use_container_width=True):
+                target_id = del_sel.split("[ID: ")[-1].replace("]", "")
+                if delete_exp(uid, target_id):
+                    st.rerun()
 
     d1,d2=st.columns(2)
     report=f"SpendSmart Report\n{datetime.strptime(sel,'%Y-%m').strftime('%B %Y')}\nTotal: ₹{total:,.0f}\n\n{by_cat.to_string()}"
