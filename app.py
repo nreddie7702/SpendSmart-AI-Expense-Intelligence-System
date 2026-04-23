@@ -445,7 +445,7 @@ def create_pdf_report(df_f, month_name, budget, total_spent, user_name):
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(190, 10, "SpendSmart Financial Report", ln=True, align='C')
     pdf.set_font("Arial", '', 12)
-    pdf.cell(190, 10, f"Report for: {month_name}", ln=True, align='C')
+    pdf.cell(190, 10, f"Report for: {month_name} (Time: {datetime.now().strftime('%H:%M:%S')})", ln=True, align='C')
     pdf.ln(5)
     
     # Overview
