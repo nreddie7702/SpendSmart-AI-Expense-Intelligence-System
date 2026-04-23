@@ -749,15 +749,22 @@ with tab1:
         for _, row in recent.iterrows():
             emoji = cat_emoji(str(row.get("category", "Other")))
             color = cat_color(str(row.get("category", "Other")))
-            st.markdown(f"""
-            <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:0.5px solid #e2e8f0;border-radius:10px;margin-bottom:6px;">
-                <div style="width:34px;height:34px;border-radius:10px;background:{color}22;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">{emoji}</div>
-                <div style="flex:1;min-width:0;">
-                    <div style="font-size:13px;font-weight:500;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{row.get('description','')}</div>
-                    <div style="font-size:11px;color:#94a3b8;">{row['date'].strftime('%d %b') if pd.notna(row['date']) else ''} · {row.get('category','')}</div>
-                </div>
-                <div style="font-size:14px;font-weight:600;color:#0f172a;flex-shrink:0;">₹{row.get('amount',0):,.0f}</div>
-            </div>""", unsafe_allow_html=True)
+            c1, c2 = st.columns([9, 1])
+            with c1:
+                st.markdown(f"""
+                <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:#fff;border:0.5px solid #e2e8f0;border-radius:10px;margin-bottom:6px;">
+                    <div style="width:34px;height:34px;border-radius:10px;background:{color}22;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">{emoji}</div>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:500;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{row.get('description','')}</div>
+                        <div style="font-size:11px;color:#94a3b8;">{row['date'].strftime('%d %b') if pd.notna(row['date']) else ''} · {row.get('category','')}</div>
+                    </div>
+                    <div style="font-size:14px;font-weight:600;color:#0f172a;flex-shrink:0;">₹{row.get('amount',0):,.0f}</div>
+                </div>""", unsafe_allow_html=True)
+            with c2:
+                if st.button("🗑️", key=f"h_del_{row['id']}"):
+                    if delete_exp(row['id']):
+                        st.success("Deleted")
+                        st.rerun()
 
 # ─────────────────────────────────────────
 #  TAB 2 — ANALYTICS
