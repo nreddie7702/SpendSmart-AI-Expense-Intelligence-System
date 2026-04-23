@@ -42,6 +42,23 @@ html,body,[class*="css"]{font-family:'Inter',sans-serif;}
 #MainMenu,footer,header{visibility:hidden;}
 .block-container{padding:1rem 1rem 2rem!important;max-width:100%!important;}
 
+/* MOBILE OPTIMIZATIONS */
+@media (max-width: 640px) {
+    .block-container { padding: 0.5rem 0.7rem !important; }
+    .stTabs [data-baseweb="tab-list"] {
+        display: flex;
+        overflow-x: auto;
+        white-space: nowrap;
+        gap: 4px;
+        padding-bottom: 5px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding: 6px 10px !important;
+        font-size: 12px !important;
+    }
+    div[data-testid="stMetricValue"] { font-size: 1.2rem !important; }
+}
+
 /* AUTH */
 .auth-brand{font-size:30px;font-weight:700;color:#6366f1;text-align:center;letter-spacing:-1px;}
 .auth-brand span{color:#0f172a;}
@@ -135,6 +152,11 @@ div[data-testid="metric-container"] div[data-testid="stMetricValue"]{color:#0f17
   .today-amount{font-size:26px;}
 }
 </style>
+
+<!-- Mobile PWA Meta Tags -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────
