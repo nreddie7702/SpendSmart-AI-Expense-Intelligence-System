@@ -5,6 +5,8 @@ import plotly.express as px
 from supabase import create_client, Client
 from datetime import datetime
 import re
+from fpdf import FPDF
+import io
 
 st.set_page_config(page_title="SpendSmart", page_icon="💰", layout="wide", initial_sidebar_state="collapsed")
 
@@ -96,6 +98,97 @@ CAT_COLORS={"Food":"#f97316","Shopping":"#6366f1","Bills":"#ef4444","Transport":
 CATEGORIES=list(CAT_COLORS.keys())
 
 def cat_color(c): return CAT_COLORS.get(c,"#94a3b8")
+
+def format_inr(number):
+    try:
+        if pd.isna(number): return "₹0"
+        is_negative = float(number) < 0
+        num_str = str(abs(int(round(float(number)))))
+        if len(num_str) <= 3:
+            res = num_str
+        else:
+            last_three = num_str[-3:]
+            other_digits = num_str[:-3]
+            res = ",".join([other_digits[max(0, i-2):i] for i in range(len(other_digits), 0, -2)][::-1]) + "," + last_three
+        return f"-₹{res}" if is_negative else f"₹{res}"
+    except:
+        return f"₹{number}"
+
+def generate_invoice_pdf(df, total, month_str, user_name):
+    pdf = FPDF()
+    pdf.add_page("P", "A4")
+    
+    pdf.set_font("Helvetica", style="B", size=22)
+    pdf.set_text_color(99, 102, 241)
+    pdf.cell(0, 10, "SpendSmart", new_x="LMARGIN", new_y="NEXT", align="L")
+    pdf.set_font("Helvetica", style="B", size=14)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 8, "EXPENSE INVOICE", new_x="LMARGIN", new_y="NEXT", align="L")
+    pdf.ln(5)
+    
+    pdf.set_font("Helvetica", size=11)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(40, 6, "Report For:", border=0)
+    pdf.set_font("Helvetica", style="B", size=11)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 6, str(user_name), new_x="LMARGIN", new_y="NEXT")
+    
+    pdf.set_font("Helvetica", size=11)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(40, 6, "Month:", border=0)
+    pdf.set_font("Helvetica", style="B", size=11)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 6, str(month_str), new_x="LMARGIN", new_y="NEXT")
+    
+    pdf.set_font("Helvetica", size=11)
+    pdf.set_text_color(100, 116, 139)
+    pdf.cell(40, 6, "Generated On:", border=0)
+    pdf.set_font("Helvetica", style="B", size=11)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 6, datetime.now().strftime('%I:%M %p, %d %b %Y'), new_x="LMARGIN", new_y="NEXT")
+    
+    pdf.ln(10)
+    
+    pdf.set_fill_color(99, 102, 241)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", style="B", size=11)
+    pdf.cell(30, 10, " Date", border=0, fill=True)
+    pdf.cell(75, 10, " Description", border=0, fill=True)
+    pdf.cell(45, 10, " Category", border=0, fill=True)
+    pdf.cell(40, 10, "Amount ", border=0, fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+    
+    pdf.set_text_color(15, 23, 42)
+    pdf.set_font("Helvetica", size=10)
+    fill = False
+    for _, row in df.iterrows():
+        if fill:
+            pdf.set_fill_color(248, 250, 252)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+            
+        amt_str = format_inr(row.get('amount', 0)).replace("₹", "Rs. ")
+        date_str = row['date'].strftime('%d %b %Y') if pd.notnull(row['date']) else ""
+        desc_str = str(row.get('description', ''))[:40]
+        cat_str = str(row.get('category', ''))
+        
+        pdf.cell(30, 10, f" {date_str}", border=0, fill=True)
+        pdf.cell(75, 10, f" {desc_str}", border=0, fill=True)
+        pdf.cell(45, 10, f" {cat_str}", border=0, fill=True)
+        pdf.cell(40, 10, f"{amt_str} ", border=0, fill=True, align="R", new_x="LMARGIN", new_y="NEXT")
+        fill = not fill
+        
+    pdf.ln(5)
+    pdf.set_draw_color(226, 232, 240)
+    pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y())
+    pdf.ln(5)
+    
+    pdf.set_font("Helvetica", style="B", size=12)
+    pdf.cell(150, 10, "Total Expenses:", align="R")
+    r_total = format_inr(total).replace("₹", "Rs. ")
+    pdf.set_text_color(99, 102, 241)
+    pdf.cell(40, 10, r_total, align="R", new_x="LMARGIN", new_y="NEXT")
+    
+    return bytes(pdf.output())
 
 # ── SUPABASE HELPERS ──
 def sign_up(email,password,name):
@@ -340,15 +433,15 @@ with tab1:
     st.markdown('<div class="sh">Overview</div>',unsafe_allow_html=True)
     k1,k2=st.columns(2)
     k3,k4=st.columns(2)
-    k1.metric("Total spent",f"₹{total:,.0f}",f"₹{remaining:,.0f} left" if remaining>=0 else f"₹{abs(remaining):,.0f} over",delta_color="normal" if remaining>=0 else "inverse")
-    k2.metric("Transactions",n_txn)
-    k3.metric("Avg per transaction",f"₹{avg_txn:,.0f}")
-    k4.metric("Top category",top_cat,f"₹{top_amt:,.0f}")
+    k1.metric("Total spent", format_inr(total), f"{format_inr(remaining)} left" if remaining>=0 else f"{format_inr(abs(remaining))} over", delta_color="normal" if remaining>=0 else "inverse")
+    k2.metric("Transactions", n_txn)
+    k3.metric("Avg per transaction", format_inr(avg_txn))
+    k4.metric("Top category", top_cat, format_inr(top_amt))
 
     st.markdown('<div class="sh">Budget</div>',unsafe_allow_html=True)
     bc="#ef4444" if pct>=100 else "#f97316" if pct>=75 else "#6366f1"
-    al=f'<div class="a3">⚠️ Over budget by ₹{abs(remaining):,.0f}</div>' if remaining<0 else f'<div class="a2">🟡 {pct:.0f}% used — watch spending</div>' if pct>=75 else f'<div class="a1">✅ On track — ₹{remaining:,.0f} left</div>'
-    st.markdown(f'<div class="bw"><div class="bl">₹{total:,.0f} of ₹{budget:,.0f} ({pct:.0f}%)</div><div class="bb"><div class="bf" style="width:{pct}%;background:{bc};"></div></div></div>{al}',unsafe_allow_html=True)
+    al=f'<div class="a3">⚠️ Over budget by {format_inr(abs(remaining))}</div>' if remaining<0 else f'<div class="a2">🟡 {pct:.0f}% used — watch spending</div>' if pct>=75 else f'<div class="a1">✅ On track — {format_inr(remaining)} left</div>'
+    st.markdown(f'<div class="bw"><div class="bl">{format_inr(total)} of {format_inr(budget)} ({pct:.0f}%)</div><div class="bb"><div class="bf" style="width:{pct}%;background:{bc};"></div></div></div>{al}',unsafe_allow_html=True)
 
     if not by_cat.empty:
         st.markdown('<div class="sh">Charts</div>',unsafe_allow_html=True)
@@ -363,21 +456,21 @@ with tab1:
         st.markdown('<div class="cc">',unsafe_allow_html=True)
         fig2 = px.pie(bar_df, values="amount", names="category", color="category",
                       color_discrete_map=CAT_COLORS, title="Category Breakdown", hole=0.55)
-        fig2.update_layout(plot_bgcolor="#f8fafc", paper_bgcolor="#f8fafc", title_font=dict(size=14, color="#0f172a"), margin=dict(t=40, b=0, l=0, r=0), height=320, annotations=[dict(text=f"Total<br>₹{total:,.0f}", x=0.5, y=0.5, font_size=16, showarrow=False, font_color="#0f172a")])
+        fig2.update_layout(plot_bgcolor="#f8fafc", paper_bgcolor="#f8fafc", title_font=dict(size=14, color="#0f172a"), margin=dict(t=40, b=0, l=0, r=0), height=320, annotations=[dict(text=f"Total<br>{format_inr(total)}", x=0.5, y=0.5, font_size=16, showarrow=False, font_color="#0f172a")])
         st.plotly_chart(fig2, use_container_width=True)
         st.markdown("</div>",unsafe_allow_html=True)
 
     st.markdown('<div class="sh">Smart insights</div>',unsafe_allow_html=True)
     ins=[]
     if not by_cat.empty:
-        ins.append(f'<div class="ic">📊 Highest: <b>{top_cat}</b> at <b>₹{top_amt:,.0f}</b> — {top_amt/total*100:.0f}% of spend.</div>')
+        ins.append(f'<div class="ic">📊 Highest: <b>{top_cat}</b> at <b>{format_inr(top_amt)}</b> — {top_amt/total*100:.0f}% of spend.</div>')
     if pct>=90: ins.append(f'<div class="ic">🔴 <b>{pct:.0f}%</b> of budget used. Reduce spending now.</div>')
     elif pct>=70: ins.append(f'<div class="ic">🟡 At <b>{pct:.0f}%</b> of budget. Watch Food and Shopping.</div>')
     else: ins.append(f'<div class="ic">🟢 Only <b>{pct:.0f}%</b> of budget used. Great job!</div>')
     food_amt=by_cat.get("Food",0)
     if food_amt and food_amt/total>0.3:
-        ins.append(f'<div class="ic">🍔 Food is <b>₹{food_amt:,.0f}</b> ({food_amt/total*100:.0f}%). Cook at home to save ~₹{food_amt*0.3:,.0f}/mo.</div>')
-    ins.append(f'<div class="ic">📅 <b>{n_txn} transactions</b> this month. Average: <b>₹{avg_txn:,.0f}</b>.</div>')
+        ins.append(f'<div class="ic">🍔 Food is <b>{format_inr(food_amt)}</b> ({food_amt/total*100:.0f}%). Cook at home to save ~{format_inr(food_amt*0.3)}/mo.</div>')
+    ins.append(f'<div class="ic">📅 <b>{n_txn} transactions</b> this month. Average: <b>{format_inr(avg_txn)}</b>.</div>')
     for i in ins: st.markdown(i,unsafe_allow_html=True)
 
     st.markdown('<div class="sh">Transactions</div>',unsafe_allow_html=True)
@@ -396,16 +489,13 @@ with tab1:
     disp["Date"] = disp["Date"].dt.strftime("%d %b %Y")
     disp = disp.sort_values("Date", ascending=False)
     
-    st.dataframe(disp[["Date","Description","Category","Amount (₹)"]],use_container_width=True,hide_index=True,
-                 column_config={"Amount (₹)":st.column_config.NumberColumn(format="₹%.0f"),
-                                "Date":st.column_config.TextColumn(width="small"),
-                                "Category":st.column_config.TextColumn(width="small")})
+    st.dataframe(disp[["Date","Description","Category","Amount (₹)"]].assign(**{"Amount (₹)": disp["Amount (₹)"].apply(format_inr)}),use_container_width=True,hide_index=True)
 
     if not disp.empty and disp["ID"].iloc[0] != "":
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         del_col1, del_col2 = st.columns([3, 1])
         with del_col1:
-            del_opts = disp.apply(lambda x: f"{x['Date']} - {x['Description']} (₹{x['Amount (₹)']}) [ID: {x['ID']}]", axis=1).tolist()
+            del_opts = disp.apply(lambda x: f"{x['Date']} - {x['Description']} ({format_inr(x['Amount (₹)'])}) [ID: {x['ID']}]", axis=1).tolist()
             del_sel = st.selectbox("Select expense to delete", del_opts, label_visibility="collapsed")
         with del_col2:
             if st.button("🗑️ Delete", type="primary", use_container_width=True):
@@ -413,10 +503,14 @@ with tab1:
                 if delete_exp(uid, target_id):
                     st.rerun()
 
-    d1,d2=st.columns(2)
-    report=f"SpendSmart Report\n{datetime.strptime(sel,'%Y-%m').strftime('%B %Y')}\nTotal: ₹{total:,.0f}\n\n{by_cat.to_string()}"
-    with d1: st.download_button("📥 Report",report,f"report_{sel}.txt",use_container_width=True)
-    with d2: st.download_button("📊 CSV",disp.to_csv(index=False),f"expenses_{sel}.csv",use_container_width=True)
+    d1, d2, d3 = st.columns(3)
+    month_str_formatted = datetime.strptime(sel,'%Y-%m').strftime('%B %Y')
+    report=f"SpendSmart Report\n{month_str_formatted}\nTotal: {format_inr(total)}\n\n{by_cat.to_string()}"
+    
+    pdf_bytes = generate_invoice_pdf(df_f, total, month_str_formatted, uname)
+    with d1: st.download_button("📄 Invoice (PDF)", pdf_bytes, f"invoice_{sel}.pdf", mime="application/pdf", use_container_width=True)
+    with d2: st.download_button("📥 Report (TXT)", report, f"report_{sel}.txt", use_container_width=True)
+    with d3: st.download_button("📊 Data (CSV)", disp.to_csv(index=False), f"expenses_{sel}.csv" ,use_container_width=True)
 
 # ────────────────────────────────────────
 #  TAB 2 — ADD EXPENSE (mobile friendly)

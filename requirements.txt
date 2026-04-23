@@ -2,4 +2,5 @@ streamlit
 pandas
 matplotlib
 supabase
-plotly
+plotly==5.19.0
+fpdf2
