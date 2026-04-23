@@ -87,7 +87,7 @@ div[data-testid="metric-container"] div[data-testid="stMetricValue"]{color:#0f17
 """, unsafe_allow_html=True)
 
 # ── SESSION STATE ──
-for k,v in {"user":None,"auth_mode":"login","upload_data":None,"auth_msg":None,"auth_type":"info"}.items():
+for k,v in {"user":None,"auth_mode":"login","upload_data":None,"auth_msg":None,"auth_type":"info","access_token":None}.items():
     if k not in st.session_state:
         st.session_state[k]=v
 
@@ -106,7 +106,10 @@ def sign_up(email,password,name):
 def sign_in(email,password):
     try:
         r=supabase.auth.sign_in_with_password({"email":email,"password":password})
-        return (True,r.user) if r.user else (False,"Invalid email or password.")
+        if r.user:
+            if r.session: st.session_state.access_token=r.session.access_token
+            return True,r.user
+        return False,"Invalid email or password."
     except Exception as e:
         m=str(e)
         if "Invalid login" in m or "invalid_credentials" in m: return False,"Invalid email or password."
@@ -125,25 +128,37 @@ def reset_pw(email):
         return True,"Password reset email sent!"
     except Exception as e: return False,str(e)
 
+def _set_token():
+    tok=st.session_state.get("access_token")
+    if tok: supabase.postgrest.auth(tok)
+
 def save_exp(uid,date,desc,amount,cat):
     try:
+        _set_token()
         supabase.table("expenses").insert({"user_id":uid,"date":str(date),"description":desc,"amount":float(amount),"category":cat}).execute()
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"Save error: {e}")
+        return False
 
 def load_exp(uid):
     try:
+        _set_token()
         r=supabase.table("expenses").select("*").eq("user_id",uid).execute()
         return pd.DataFrame(r.data) if r.data else pd.DataFrame()
-    except: return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Load error: {e}")
+        return pd.DataFrame()
 
 # ── OAUTH CALLBACK ──
 params=st.query_params
 if "access_token" in params and st.session_state.user is None:
     try:
-        r=supabase.auth.get_user(params["access_token"])
+        tok=params["access_token"]
+        r=supabase.auth.get_user(tok)
         if r.user:
             st.session_state.user=r.user
+            st.session_state.access_token=tok
             st.query_params.clear()
             st.rerun()
     except: pass
@@ -418,8 +433,22 @@ with tab3:
         try:
             df_up=pd.read_csv(uf)
             st.session_state.upload_data=df_up
-            st.markdown(f'<div class="s-box">✅ Uploaded {len(df_up)} rows. Go to Dashboard to see your data.</div>',unsafe_allow_html=True)
+            st.markdown(f'<div class="s-box">✅ Loaded {len(df_up)} rows. Preview below — click Save to store them.</div>',unsafe_allow_html=True)
             st.dataframe(df_up.head(5),use_container_width=True,hide_index=True)
+            if st.button("💾 Save all to Database",use_container_width=True,type="primary",key="t3_save"):
+                ok_cnt=0;err_cnt=0
+                for _,row in df_up.iterrows():
+                    try:
+                        cols={c.lower():v for c,v in row.items()}
+                        saved=save_exp(uid,cols.get("date"),str(cols.get("description","")),cols.get("amount",0),str(cols.get("category","Other")))
+                        if saved: ok_cnt+=1
+                        else: err_cnt+=1
+                    except: err_cnt+=1
+                if ok_cnt>0:
+                    st.markdown(f'<div class="s-box">✅ Saved {ok_cnt} expenses! Go to Dashboard to view them.</div>',unsafe_allow_html=True)
+                    st.session_state.upload_data=None
+                if err_cnt>0:
+                    st.markdown(f'<div class="e-box">⚠️ {err_cnt} rows failed. Check date format (YYYY-MM-DD) and try again.</div>',unsafe_allow_html=True)
         except Exception as e:
             st.markdown(f'<div class="e-box">Error reading file: {str(e)}</div>',unsafe_allow_html=True)
 
