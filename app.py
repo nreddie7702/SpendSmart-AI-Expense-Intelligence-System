@@ -21,6 +21,13 @@ SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# Restore session if available
+if "access_token" in st.session_state and "refresh_token" in st.session_state:
+    try:
+        supabase.auth.set_session(st.session_state["access_token"], st.session_state["refresh_token"])
+    except: pass
+
+
 # ─────────────────────────────────────────
 #  CSS
 # ─────────────────────────────────────────
@@ -149,12 +156,18 @@ def sign_up(email, password, name):
     try:
         r = supabase.auth.sign_up({"email": email, "password": password,
                                     "options": {"data": {"full_name": name}}})
+        if r.session:
+            st.session_state.access_token = r.session.access_token
+            st.session_state.refresh_token = r.session.refresh_token
         return (True, "Account created! Check your email to confirm.") if r.user else (False, "Signup failed.")
     except Exception as e: return False, str(e)
 
 def sign_in(email, password):
     try:
         r = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        if r.session:
+            st.session_state.access_token = r.session.access_token
+            st.session_state.refresh_token = r.session.refresh_token
         return (True, r.user) if r.user else (False, "Invalid email or password.")
     except Exception as e:
         m = str(e)
@@ -182,8 +195,9 @@ def save_exp(uid, date_val, desc, amount, cat):
             "user_id": uid, "date": str(date_val),
             "description": desc, "amount": float(amount), "category": cat
         }).execute()
-        return True
-    except: return False
+        return True, ""
+    except Exception as e: 
+        return False, str(e)
 
 def load_exp(uid):
     try:
@@ -434,6 +448,8 @@ if "access_token" in params and st.session_state.user is None:
         r = supabase.auth.get_user(params["access_token"])
         if r.user:
             st.session_state.user = r.user
+            st.session_state.access_token = params["access_token"]
+            st.session_state.refresh_token = params.get("refresh_token", "")
             st.query_params.clear()
             st.rerun()
     except: pass
@@ -871,11 +887,12 @@ with tab3:
         elif e_amount <= 0:
             st.markdown('<div class="e-box">Please enter an amount greater than 0.</div>', unsafe_allow_html=True)
         else:
-            if save_exp(uid, e_date, e_desc, e_amount, e_cat):
+            success, err_msg = save_exp(uid, e_date, e_desc, e_amount, e_cat)
+            if success:
                 st.markdown('<div class="s-box">✅ Expense saved!</div>', unsafe_allow_html=True)
                 st.balloons()
             else:
-                st.markdown('<div class="e-box">Failed to save. Try again.</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="e-box">Failed to save: {err_msg}</div>', unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
     # Quick category guide
