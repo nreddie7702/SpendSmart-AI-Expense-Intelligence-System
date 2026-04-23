@@ -888,6 +888,28 @@ with tab2:
             
         with d2: st.download_button("📊 CSV", disp.to_csv(index=False), f"expenses_{sel}.csv", use_container_width=True)
 
+        # Manage
+        st.markdown('<div class="sh" style="margin-top:1.5rem">Manage Transactions</div>', unsafe_allow_html=True)
+        with st.expander("🗑️ Delete Expenses"):
+            if not df_f.empty:
+                df_f["label"] = df_f.apply(lambda r: f"{r['date'].strftime('%d %b')} - {r['description']} (₹{r['amount']})", axis=1)
+                to_del = st.multiselect("Select transactions to remove", df_f["label"].tolist())
+                if st.button("Delete Selected", type="primary", use_container_width=True):
+                    if to_del:
+                        ids = df_f[df_f["label"].isin(to_del)]["id"].tolist()
+                        success_count = 0
+                        for eid in ids:
+                            if delete_exp(eid): success_count += 1
+                        if success_count > 0:
+                            st.success(f"Successfully deleted {success_count} transaction(s)!")
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete transactions.")
+                    else:
+                        st.warning("Please select at least one transaction.")
+            else:
+                st.info("No transactions to delete in this month.")
+
         st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────
