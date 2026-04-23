@@ -5,6 +5,8 @@ import matplotlib.dates as mdates
 from supabase import create_client, Client
 from datetime import datetime, timedelta, date
 import re
+import json
+import PIL.Image
 from google import genai
 from google.genai import types
 
@@ -438,7 +440,7 @@ def get_prediction(df):
 #  SESSION STATE
 # ─────────────────────────────────────────
 for k, v in {"user": None, "auth_mode": "login", "upload_data": None,
-              "auth_msg": None, "auth_type": "info", "chat_history": [], "gemini_api_key": ""}.items():
+              "auth_msg": None, "auth_type": "info", "chat_history": [], "gemini_api_key": "", "ocr_data": None}.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -905,10 +907,75 @@ with tab3:
     st.subheader("Add New Expense")
 
     with st.container(border=True):
-        e_date = st.date_input("Date", value=datetime.today(), key="t3_date")
-        e_desc = st.text_input("Description", placeholder="e.g. Swiggy, Amazon, Electricity bill", key="t3_desc")
-        e_amount = st.number_input("Amount (₹)", min_value=0.0, step=10.0, key="t3_amt")
-        e_cat = st.selectbox("Category", CATEGORIES, key="t3_cat")
+        st.markdown('**📸 Smart Receipt Scanner**')
+        receipt_file = st.file_uploader("Upload a receipt to auto-fill details (Requires Gemini API Key in Settings)", type=["png", "jpg", "jpeg"], key="t3_receipt")
+        
+        if receipt_file is not None and st.button("Scan Receipt with AI", type="secondary"):
+            api_key = st.session_state.gemini_api_key
+            if not api_key:
+                st.error("Please configure your Gemini API Key in the Settings tab first.")
+            else:
+                with st.spinner("Scanning receipt..."):
+                    try:
+                        client = genai.Client(api_key=api_key)
+                        img = PIL.Image.open(receipt_file)
+                        
+                        ocr_prompt = f"""
+                        You are an OCR receipt parser. Extract the following from the receipt image:
+                        - date (YYYY-MM-DD format if possible, otherwise leave blank)
+                        - description (Vendor name or short summary)
+                        - amount (Just the final total number, no currency symbols)
+                        - category (You MUST pick exactly ONE from this list: {', '.join(CATEGORIES)}. If unsure, pick 'Other')
+                        
+                        Return ONLY a valid, raw JSON object with keys: "date", "description", "amount", "category". Do not include markdown formatting or backticks.
+                        """
+                        
+                        models_to_try = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"]
+                        response = None
+                        for model_name in models_to_try:
+                            try:
+                                response = client.models.generate_content(
+                                    model=model_name,
+                                    contents=[img, ocr_prompt]
+                                )
+                                break
+                            except:
+                                continue
+                                
+                        if response:
+                            raw_json = response.text.replace("```json", "").replace("```", "").strip()
+                            st.session_state.ocr_data = json.loads(raw_json)
+                            st.success("Receipt scanned successfully! Please review the auto-filled values below.")
+                        else:
+                            st.error("Failed to scan receipt. Ensure API key is valid.")
+                    except Exception as e:
+                        st.error(f"Error parsing receipt: {e}")
+
+        st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+        
+        # Determine default values from OCR data if available
+        def_date = datetime.today()
+        def_desc = ""
+        def_amt = 0.0
+        def_cat_idx = 0
+        
+        if st.session_state.ocr_data:
+            ocr = st.session_state.ocr_data
+            try:
+                if ocr.get("date"): def_date = datetime.strptime(ocr.get("date"), "%Y-%m-%d").date()
+            except: pass
+            def_desc = ocr.get("description", "")
+            try:
+                if ocr.get("amount"): def_amt = float(ocr.get("amount"))
+            except: pass
+            cat_guess = ocr.get("category", "")
+            if cat_guess in CATEGORIES:
+                def_cat_idx = CATEGORIES.index(cat_guess)
+
+        e_date = st.date_input("Date", value=def_date, key="t3_date")
+        e_desc = st.text_input("Description", value=def_desc, placeholder="e.g. Swiggy, Amazon, Electricity bill", key="t3_desc")
+        e_amount = st.number_input("Amount (₹)", min_value=0.0, value=def_amt, step=10.0, key="t3_amt")
+        e_cat = st.selectbox("Category", CATEGORIES, index=def_cat_idx, key="t3_cat")
 
         if st.button("Add Expense", use_container_width=True, type="primary", key="t3_add"):
             if not e_desc:
@@ -919,6 +986,7 @@ with tab3:
                 success, err_msg = save_exp(uid, e_date, e_desc, e_amount, e_cat)
                 if success:
                     st.success("✅ Expense saved!")
+                    st.session_state.ocr_data = None # Clear OCR data on success
                     st.balloons()
                 else:
                     st.error(f"Failed to save: {err_msg}")
